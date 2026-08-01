@@ -1,0 +1,225 @@
+-- // Portal Gun from Rick and Morty with Teleport & Coordinate Shift
+-- // Активируется при запуске скрипта
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
+local Camera = Workspace.CurrentCamera
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local rootPart = character:WaitForChild("HumanoidRootPart")
+
+-- // Включаем Shift Lock
+player:SetAttribute("ShiftLock", true)
+
+-- // Создаем GUI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Parent = player:PlayerGui
+screenGui.Name = "PortalGunGUI"
+
+-- // Первая кнопка (Телепортация)
+local teleportButton = Instance.new("TextButton")
+teleportButton.Size = UDim2.new(0, 200, 0, 60)
+teleportButton.Position = UDim2.new(0.5, -100, 0.8, -80)
+teleportButton.Text = "ПРИЦЕЛИТЬСЯ И ТЕЛЕПОРТИРОВАТЬСЯ"
+teleportButton.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
+teleportButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+teleportButton.Font = Enum.Font.SourceSansBold
+teleportButton.TextSize = 16
+teleportButton.Parent = screenGui
+teleportButton.ZIndex = 10
+
+-- // Вторая кнопка (Смена координат)
+local shiftButton = Instance.new("TextButton")
+shiftButton.Size = UDim2.new(0, 200, 0, 60)
+shiftButton.Position = UDim2.new(0.5, -100, 0.8, 0)
+shiftButton.Text = "МЕНЯТЬ КООРДИНАТЫ"
+shiftButton.BackgroundColor3 = Color3.fromRGB(255, 100, 0)
+shiftButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+shiftButton.Font = Enum.Font.SourceSansBold
+shiftButton.TextSize = 16
+shiftButton.Parent = screenGui
+shiftButton.ZIndex = 10
+
+-- // Создаем указатель прицеливания (стрелочка)
+local aimPointer = Instance.new("Part")
+aimPointer.Size = Vector3.new(0.5, 0.5, 2)
+aimPointer.BrickColor = BrickColor.new("Lime green")
+aimPointer.Material = Enum.Material.Neon
+aimPointer.Anchored = true
+aimPointer.CanCollide = false
+aimPointer.Transparency = 0.3
+aimPointer.Parent = Workspace
+
+-- // Свечение для указателя
+local pointerLight = Instance.new("PointLight")
+pointerLight.Brightness = 2
+pointerLight.Range = 10
+pointerLight.Color = Color3.fromRGB(0, 255, 0)
+pointerLight.Parent = aimPointer
+
+-- // Координаты прицела
+local aimPosition = rootPart.Position + Vector3.new(0, 0, -10)
+aimPointer.Position = aimPosition
+local currentRotation = 0
+
+-- // Анимация портальной пушки (доставание из Rick and Morty)
+local function spawnPortalGun()
+    -- // Создаем модель пушки
+    local portalGun = Instance.new("Model")
+    portalGun.Name = "PortalGun"
+    portalGun.Parent = Workspace
+
+    -- // Корпус пушки
+    local gunBody = Instance.new("Part")
+    gunBody.Size = Vector3.new(0.5, 0.8, 2)
+    gunBody.BrickColor = BrickColor.new("White")
+    gunBody.Material = Enum.Material.Metal
+    gunBody.Anchored = true
+    gunBody.CanCollide = false
+    gunBody.Parent = portalGun
+
+    -- // Зеленая трубка
+    local greenTube = Instance.new("Part")
+    greenTube.Size = Vector3.new(0.3, 0.3, 1.5)
+    greenTube.BrickColor = BrickColor.new("Lime green")
+    greenTube.Material = Enum.Material.Neon
+    greenTube.Anchored = true
+    greenTube.CanCollide = false
+    greenTube.Parent = portalGun
+
+    -- // Позиционируем перед игроком
+    local spawnPos = rootPart.Position + rootPart.CFrame.LookVector * 2 + Vector3.new(0, 1, 0)
+    gunBody.Position = spawnPos
+    greenTube.Position = spawnPos + Vector3.new(0, 0.2, 1)
+
+    -- // Анимация появления
+    for i = 0, 1, 0.05 do
+        gunBody.Transparency = 1 - i
+        greenTube.Transparency = 1 - i
+        task.wait(0.02)
+    end
+
+    -- // Вспышка
+    local flash = Instance.new("PointLight")
+    flash.Brightness = 5
+    flash.Range = 20
+    flash.Color = Color3.fromRGB(0, 255, 0)
+    flash.Parent = gunBody
+    task.wait(0.3)
+    flash:Destroy()
+
+    -- // Удаляем пушку через 1 секунду
+    task.wait(1)
+    portalGun:Destroy()
+end
+
+-- // Функция телепортации
+local function teleportToAim()
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    raycastParams.FilterDescendantsInstances = {character}
+
+    local rayOrigin = rootPart.Position
+    local rayDirection = rootPart.CFrame.LookVector * 500
+
+    local raycastResult = Workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+
+    if raycastResult then
+        local targetPosition = raycastResult.Position + raycastResult.Normal * 3
+        
+        -- // Эффект телепортации
+        local portalEffect = Instance.new("Part")
+        portalEffect.Position = rootPart.Position
+        portalEffect.Size = Vector3.new(4, 6, 0.1)
+        portalEffect.BrickColor = BrickColor.new("Lime green")
+        portalEffect.Material = Enum.Material.Neon
+        portalEffect.Anchored = true
+        portalEffect.CanCollide = false
+        portalEffect.Parent = Workspace
+        
+        -- // Телепортация
+        rootPart.CFrame = CFrame.new(targetPosition) * CFrame.Angles(0, rootPart.CFrame.LookVector.Y, 0)
+        
+        task.wait(0.5)
+        portalEffect:Destroy()
+    end
+end
+
+-- // Функция смены координат прицела
+local function shiftAimCoordinates()
+    currentRotation = (currentRotation + 45) % 360
+    local radius = 10
+    local rad = math.rad(currentRotation)
+    
+    aimPosition = rootPart.Position + Vector3.new(
+        math.cos(rad) * radius,
+        0,
+        math.sin(rad) * radius
+    )
+    
+    -- // Плавное перемещение указателя
+    local tween = TweenService:Create(aimPointer, 
+        TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        {Position = aimPosition}
+    )
+    tween:Play()
+    
+    -- // Визуальный эффект вращения
+    spawnPortalGun()
+end
+
+-- // Обработчики кнопок
+teleportButton.MouseButton1Click:Connect(function()
+    teleportToAim()
+    spawnPortalGun()
+end)
+
+shiftButton.MouseButton1Click:Connect(function()
+    shiftAimCoordinates()
+end)
+
+-- // Постоянное обновление указателя
+RunService.Heartbeat:Connect(function()
+    if not character or not rootPart then
+        character = player.Character
+        if character then
+            rootPart = character:WaitForChild("HumanoidRootPart")
+        end
+        return
+    end
+    
+    -- // Обновляем позицию указателя относительно камеры
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    raycastParams.FilterDescendantsInstances = {character}
+
+    local rayOrigin = rootPart.Position
+    local rayDirection = rootPart.CFrame.LookVector * 500
+    
+    local raycastResult = Workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+    
+    if raycastResult then
+        aimPointer.Position = raycastResult.Position
+    end
+end)
+
+-- // Запускаем анимацию при активации
+spawnPortalGun()
+
+-- // Уведомление о активации
+local notification = Instance.new("TextLabel")
+notification.Size = UDim2.new(0, 300, 0, 50)
+notification.Position = UDim2.new(0.5, -150, 0.1, 0)
+notification.Text = "ПОРТАЛЬНАЯ ПУШКА АКТИВИРОВАНА!"
+notification.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+notification.TextColor3 = Color3.fromRGB(255, 255, 255)
+notification.Font = Enum.Font.SourceSansBold
+notification.TextSize = 20
+notification.Parent = screenGui
+task.wait(2)
+notification:Destroy()
