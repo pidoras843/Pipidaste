@@ -1,0 +1,43 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local portalEvent = Instance.new("RemoteEvent")
+portalEvent.Name = "CreatePortalEvent"
+portalEvent.Parent = ReplicatedStorage
+
+local playerPortals = {}
+
+portalEvent.OnServerEvent:Connect(function(player, hitPosition)
+    if not playerPortals[player] then playerPortals[player] = {} end
+    local portals = playerPortals[player]
+
+    local portal = Instance.new("Part")
+    portal.Shape = Enum.PartType.Cylinder
+    portal.Size = Vector3.new(0.5, 8, 6)
+    portal.Color = Color3.fromRGB(50, 255, 50)
+    portal.Material = Enum.Material.Neon
+    portal.Anchored = true
+    portal.CanCollide = false
+    
+    portal.CFrame = CFrame.new(hitPosition + Vector3.new(0, 4, 0)) * CFrame.Angles(0, math.pi/2, math.pi/2)
+    portal.Parent = workspace
+
+    if #portals >= 2 then
+        portals[1]:Destroy()
+        table.remove(portals, 1)
+    end
+    table.insert(portals, portal)
+
+    local debounce = false
+    portal.Touched:Connect(function(hit)
+        if debounce then return end
+        local character = hit.Parent
+        local humanoid = character:FindFirstChild("Humanoid")
+        
+        if humanoid and #portals == 2 then
+            debounce = true
+            local targetPortal = (portal == portals[1]) and portals[2] or portals[1]
+            character:SetPrimaryPartCFrame(targetPortal.CFrame * CFrame.new(0, -3, 0))
+            task.wait(1.5)
+            debounce = false
+        end
+    end)
+end)
