@@ -1,0 +1,109 @@
+local tool = script.Parent
+local player = game.Players.LocalPlayer
+local mouse = player:GetMouse()
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+
+local portalEvent = ReplicatedStorage:WaitForChild("CreatePortalEvent")
+
+local dimensionLetter = "C"
+local dimensionNumber = 137
+local editMode = "Number"
+
+local playerGui = player:WaitForChild("PlayerGui")
+local screenGui = Instance.new("ScreenGui", playerGui)
+screenGui.ResetOnSpawn = false
+screenGui.Enabled = false
+
+local mainFrame = Instance.new("Frame", screenGui)
+mainFrame.Size = UDim2.new(0, 400, 0, 300)
+mainFrame.Position = UDim2.new(0.5, -200, 0.5, -150)
+mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+mainFrame.Active = true
+mainFrame.Draggable = true
+
+local whiteBg = Instance.new("Frame", mainFrame)
+whiteBg.Size = UDim2.new(1, -20, 1, -20)
+whiteBg.Position = UDim2.new(0, 10, 0, 10)
+whiteBg.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
+
+local redRect = Instance.new("TextButton", whiteBg)
+redRect.Size = UDim2.new(0, 140, 0, 60)
+redRect.Position = UDim2.new(0.5, -70, 0, 20)
+redRect.BackgroundColor3 = Color3.fromRGB(139, 0, 0)
+redRect.Text = dimensionLetter .. "-" .. dimensionNumber
+redRect.TextColor3 = Color3.new(1, 1, 1)
+redRect.TextScaled = true
+redRect.Font = Enum.Font.Code
+
+local dial = Instance.new("Frame", whiteBg)
+dial.Size = UDim2.new(0, 120, 0, 120)
+dial.Position = UDim2.new(0.5, -60, 0, 120)
+dial.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+local corner = Instance.new("UICorner", dial)
+corner.CornerRadius = UDim.new(1, 0)
+
+local leftClick = Instance.new("TextButton", dial)
+leftClick.Size = UDim2.new(0.5, 0, 1, 0)
+leftClick.BackgroundTransparency = 1
+leftClick.Text = ""
+
+local rightClick = Instance.new("TextButton", dial)
+rightClick.Size = UDim2.new(0.5, 0, 1, 0)
+rightClick.Position = UDim2.new(0.5, 0, 0, 0)
+rightClick.BackgroundTransparency = 1
+rightClick.Text = ""
+
+redRect.MouseButton1Click:Connect(function()
+    if editMode == "Number" then
+        editMode = "Letter"
+        redRect.TextColor3 = Color3.fromRGB(150, 255, 150)
+    else
+        editMode = "Number"
+        redRect.TextColor3 = Color3.new(1, 1, 1)
+    end
+end)
+
+local function updateDisplay()
+    redRect.Text = dimensionLetter .. "-" .. dimensionNumber
+end
+
+leftClick.MouseButton1Click:Connect(function()
+    if editMode == "Number" then
+        dimensionNumber = dimensionNumber - 1
+    else
+        local byte = string.byte(dimensionLetter) - 1
+        if byte < 65 then byte = 90 end
+        dimensionLetter = string.char(byte)
+    end
+    updateDisplay()
+end)
+
+rightClick.MouseButton1Click:Connect(function()
+    if editMode == "Number" then
+        dimensionNumber = dimensionNumber + 1
+    else
+        local byte = string.byte(dimensionLetter) + 1
+        if byte > 90 then byte = 65 end
+        dimensionLetter = string.char(byte)
+    end
+    updateDisplay()
+end)
+
+UserInputService.InputBegan:Connect(function(input, isProcessed)
+    if isProcessed then return end
+    if input.KeyCode == Enum.KeyCode.E and tool.Parent == player.Character then
+        screenGui.Enabled = not screenGui.Enabled
+    end
+end)
+
+tool.Activated:Connect(function()
+    if screenGui.Enabled then return end 
+    if mouse.Hit then
+        portalEvent:FireServer(mouse.Hit.Position)
+    end
+end)
+
+tool.Unequipped:Connect(function()
+    screenGui.Enabled = false
+end)
