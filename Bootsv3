@@ -1,0 +1,237 @@
+--[[
+	GRAVITY BOOTS — CLEAN VERSION
+	==============================
+	Место: StarterCharacterScripts > LocalScript
+	
+	Что делает:
+	• Спавнит ботинки прямо на ногах персонажа (видны сразу)
+	• Инструмент "Gravity Boots" появляется в инвентаре
+	• 1й клик  — включить хождение по стенам (квадрат светится синим)
+	• 2й клик  — выключить, вернуться к обычной гравитации
+]]
+
+local Players    = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player    = Players.LocalPlayer
+local char      = script.Parent
+local hum       = char:WaitForChild("Humanoid")
+local hrp       = char:WaitForChild("HumanoidRootPart")
+local leftLeg   = char:WaitForChild("Left Leg")
+local rightLeg  = char:WaitForChild("Right Leg")
+
+-- ================================================================
+-- 1. СТРОИМ ОДИН БОТИНОК И ВЕЛЬДИМ К НОГЕ
+-- ================================================================
+local function makePart(parent, name, size, brickColor, material)
+	local p = Instance.new("Part")
+	p.Name        = name
+	p.Size        = size
+	p.BrickColor  = BrickColor.new(brickColor)
+	p.Material    = material
+	p.Anchored    = false
+	p.CanCollide  = false
+	p.Massless    = true
+	p.CastShadow  = true
+	p.Parent      = parent
+	return p
+end
+
+local function weld(a, b, cf)
+	local w    = Instance.new("Weld")
+	w.Part0    = a
+	w.Part1    = b
+	w.C0       = cf or CFrame.new()
+	w.C1       = CFrame.new()
+	w.Parent   = a
+end
+
+local function buildBoot(leg)
+	-- подошва — главная часть, к ней всё крепится
+	local sole = makePart(char, "Sole",
+		Vector3.new(1.0, 0.2, 1.6),
+		"Dark blue-grey", Enum.Material.SmoothPlastic)
+
+	-- крепим подошву к ноге
+	weld(leg, sole, CFrame.new(0, -1.0, 0))
+
+	-- все остальные части крепятся к подошве
+	local function sub(name, size, color, mat, x, y, z)
+		local p = makePart(char, name, size, color, mat)
+		weld(sole, p, CFrame.new(x, y, z))
+		return p
+	end
+
+	-- тело ботинка
+	sub("Body", Vector3.new(0.9, 0.9, 1.5),
+		"Sand blue", Enum.Material.SmoothPlastic,
+		0, 0.55, 0)
+
+	-- манжета (светло-серая верхняя часть)
+	sub("Cuff", Vector3.new(1.0, 0.4, 1.6),
+		"Light stone grey", Enum.Material.SmoothPlastic,
+		0, 1.1, 0)
+
+	-- оранжевое кольцо вокруг ботинка (4 стороны)
+	local W, D, T, Y, H = 0.9, 1.5, 0.08, 0.55, 0.2
+	sub("OrangeF", Vector3.new(W, H, T), "Deep orange", Enum.Material.SmoothPlastic,  0,    Y,  D/2+T/2)
+	sub("OrangeB", Vector3.new(W, H, T), "Deep orange", Enum.Material.SmoothPlastic,  0,    Y, -D/2-T/2)
+	sub("OrangeL", Vector3.new(T, H, D), "Deep orange", Enum.Material.SmoothPlastic,  W/2+T/2, Y, 0)
+	sub("OrangeR", Vector3.new(T, H, D), "Deep orange", Enum.Material.SmoothPlastic, -W/2-T/2, Y, 0)
+
+	-- чёрный светящийся квадрат спереди
+	local sq = sub("GlowSquare", Vector3.new(0.35, 0.35, 0.1),
+		"Really black", Enum.Material.Neon,
+		0, Y, D/2 + T + 0.05)
+
+	-- синий свет из квадрата
+	local light = Instance.new("PointLight")
+	light.Color      = Color3.fromRGB(42, 111, 255)
+	light.Brightness = 0
+	light.Range      = 8
+	light.Parent     = sq
+
+	return light
+end
+
+local lightL = buildBoot(leftLeg)
+local lightR = buildBoot(rightLeg)
+
+-- ================================================================
+-- 2. ИНСТРУМЕНТ В ИНВЕНТАРЕ
+-- ================================================================
+local tool = Instance.new("Tool")
+tool.Name           = "Gravity Boots"
+tool.RequiresHandle = false
+tool.ToolTip        = "Нажми — включить хождение по стенам"
+tool.Parent         = player.Backpack
+
+-- ================================================================
+-- 3. ГРАВИТАЦИЯ — ХОЖДЕНИЕ ПО ЛЮБЫМ ПОВЕРХНОСТЯМ
+-- ================================================================
+local gravityEnabled = false
+local heartbeat      = nil
+local bodyForce      = nil
+local bodyGyro       = nil
+
+local rayParams = RaycastParams.new()
+rayParams.FilterType                 = Enum.RaycastFilterType.Exclude
+rayParams.FilterDescendantsInstances = {char}
+
+local function findSurface()
+	-- ищем ближайшую поверхность по 6 осям
+	local best    = nil
+	local bestDist = math.huge
+
+	local origins = {
+		Vector3.new( 0, -1,  0),
+		Vector3.new( 0,  1,  0),
+		Vector3.new( 1,  0,  0),
+		Vector3.new(-1,  0,  0),
+		Vector3.new( 0,  0,  1),
+		Vector3.new( 0,  0, -1),
+	}
+
+	for _, dir in ipairs(origins) do
+		local hit = workspace:Raycast(hrp.Position, dir * 6, rayParams)
+		if hit then
+			local dist = (hit.Position - hrp.Position).Magnitude
+			if dist < bestDist then
+				bestDist = dist
+				best     = hit.Normal
+			end
+		end
+	end
+
+	return best
+end
+
+local smoothNormal = Vector3.new(0, 1, 0)
+
+local function enableGravity()
+	gravityEnabled    = true
+	lightL.Brightness = 3
+	lightR.Brightness = 3
+	workspace.Gravity = 0
+
+	bodyForce           = Instance.new("BodyForce")
+	bodyForce.Force     = Vector3.new(0, 0, 0)
+	bodyForce.Parent    = hrp
+
+	bodyGyro            = Instance.new("BodyGyro")
+	bodyGyro.MaxTorque  = Vector3.new(5e5, 5e5, 5e5)
+	bodyGyro.P          = 3e4
+	bodyGyro.D          = 1000
+	bodyGyro.CFrame     = hrp.CFrame
+	bodyGyro.Parent     = hrp
+
+	heartbeat = RunService.Heartbeat:Connect(function()
+		local norm = findSurface()
+
+		if norm then
+			-- плавно поворачиваем нормаль
+			smoothNormal = smoothNormal:Lerp(norm, 0.2)
+			local up = smoothNormal.Unit
+
+			-- тянем к поверхности
+			bodyForce.Force = -up * 196.2 * 12
+
+			-- разворачиваем персонажа: "вверх" = нормаль поверхности
+			local fwd = hrp.CFrame.LookVector
+			if math.abs(fwd:Dot(up)) > 0.95 then
+				fwd = hrp.CFrame.RightVector
+			end
+			fwd = (fwd - up * fwd:Dot(up)).Unit
+			bodyGyro.CFrame = CFrame.fromMatrix(
+				hrp.Position,
+				fwd:Cross(up).Unit,
+				up,
+				-fwd
+			)
+		else
+			-- в воздухе — стандартная гравитация вниз
+			bodyForce.Force  = Vector3.new(0, -196.2 * 6, 0)
+			smoothNormal      = smoothNormal:Lerp(Vector3.new(0,1,0), 0.1)
+		end
+	end)
+end
+
+local function disableGravity()
+	gravityEnabled    = false
+	lightL.Brightness = 0
+	lightR.Brightness = 0
+	workspace.Gravity = 196.2
+
+	if heartbeat   then heartbeat:Disconnect(); heartbeat   = nil end
+	if bodyForce   then bodyForce:Destroy();    bodyForce   = nil end
+	if bodyGyro    then bodyGyro:Destroy();     bodyGyro    = nil end
+
+	smoothNormal = Vector3.new(0, 1, 0)
+
+	-- возвращаем прямую ориентацию
+	hrp.CFrame = CFrame.new(hrp.Position)
+end
+
+-- ================================================================
+-- 4. КЛИКИ НА ИНСТРУМЕНТ
+-- ================================================================
+tool.Activated:Connect(function()
+	if gravityEnabled then
+		disableGravity()
+		tool.ToolTip = "Нажми — включить хождение по стенам"
+	else
+		enableGravity()
+		tool.ToolTip = "Нажми — выключить режим стен"
+	end
+end)
+
+-- ================================================================
+-- 5. СБРОС ПРИ СМЕРТИ
+-- ================================================================
+hum.Died:Connect(function()
+	if gravityEnabled then
+		disableGravity()
+	end
+end)
+
+print("[GravityBoots] Скрипт запущен успешно!")
